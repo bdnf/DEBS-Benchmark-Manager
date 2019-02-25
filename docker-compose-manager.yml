@@ -1,0 +1,17 @@
+version: "3"
+services:
+  manager:
+    container_name: manager
+    build:
+      context: .
+      dockerfile: Dockerfile.manager
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./server_app:/server_app
+      - ./manager_logs:/server_app/manager_logs
+      - ./logs:/logs
+    environment:
+      FRONTEND_SERVER: host.docker.internal
+      MANAGER_SLEEP_TIME: 20
+      RESULT_PATH: /result
+      SCHEDULE_PATH: /schedule

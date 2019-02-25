@@ -1,0 +1,24 @@
+networks:
+  bench: {}
+services:
+  client:
+    container_name: client-app-docker_api_python_client_test
+    depends_on:
+    - server
+    environment:
+      BENCHMARK_SYSTEM_URL: server
+    image: olehbodunov/docker_api_python_client_test
+    links:
+    - server
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: benchmark-server-logging
+    env_file:
+    - .env
+    restart: always
+    volumes:
+    - ${HOST_DATASET_FOLDER}:/dataset
+    - ${HOST_LOG_FOLDER}/docker_api_python_client_test:/logs
+version: '3'

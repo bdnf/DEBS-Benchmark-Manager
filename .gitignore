@@ -1,0 +1,13 @@
+*.pyc
+*.ipynb
+*.csv
+.ipynb_checkpoints/
+__pycache__/
+logs/
+manager_logs/
+*.db
+dbs
+db/
+client-app/
+container-manager/
+Dockerfile.client
