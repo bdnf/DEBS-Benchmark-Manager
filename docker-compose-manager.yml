@@ -11,7 +11,7 @@ services:
       - ./manager_logs:/server_app/manager_logs
       - ./logs:/logs
     environment:
-      FRONTEND_SERVER: host.docker.internal
       MANAGER_SLEEP_TIME: 20
-      RESULT_PATH: /result
-      SCHEDULE_PATH: /schedule
+      API_SERVER: https://se.inf.tu-dresden.de/debs2019/
+      API_RESULT_PATH: /result
+      API_SCHEDULE_PATH: /schedule
