@@ -12,6 +12,7 @@ You can set up them in [this .env file](server_app/.env)!
   `HOST_LOG_FOLDER`
   and the Timeouts.
 
+<br>
 
 `Additional variables` can be set in [main docker-compose file](./docker-compose-manager.yml)
 
