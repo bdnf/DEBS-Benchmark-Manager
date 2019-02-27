@@ -23,13 +23,13 @@ current_scene = 0
 
 if not os.path.isfile(in_file):
     print("in.csv file not found. Please put datafiles in /dataset folder")
-    #raise FileNotFoundError()
+    raise FileNotFoundError()
     #exit(1)
     #time.sleep(15)
-    pwd = os.getcwd()
-    print("pwd: ", pwd)
-    subprocess.check_output(['cd ..'])
-    subprocess.check_output(['ls dataset/'])
+    # pwd = os.getcwd()
+    # print("pwd: ", pwd)
+    # subprocess.check_output(['cd ..'])
+    # subprocess.check_output(['ls dataset/'])
 
 TOTAL_SCENES = int(subprocess.check_output(["tail", "-1", in_file]).decode('ascii').split(",")[0].split('.')[0]) + 1
 try:
@@ -49,7 +49,7 @@ else:
     df = pd.read_csv(in_file, sep=',', header = None, names=['time', 'laser_id', 'X', 'Y', 'Z'], iterator=True)
 
 #TODO improve global state
-log_filename = 'demo%s.log' % int(datetime.datetime.utcnow().strftime("%s"))
+log_filename = 'benchmark%s.log' % int(datetime.datetime.utcnow().strftime("%s"))
 
 logging.basicConfig(filename='../logs/'+log_filename,
                     level=logging.INFO,
@@ -100,7 +100,7 @@ class Benchmark(Resource):
                 BenchmarkResults.results(current_scene)
                 logging.warning('Last scene reached. Total time is 0. No more scenes left. Please, check you detailed results now')
                 filename = int(datetime.datetime.utcnow().strftime("%s"))
-                os.system('cp debs.db /logs/destination%s.db' % filename)
+                os.system('cp debs.db /logs/benchmark%s.db' % filename)
                 return {'message': 'Last scene reached. No more scenes left. Please, check you detailed results now',
                         'total runtime': 'An error occured when computing total runtime. Please rebuild the Benchmark server'}, 404
             else:

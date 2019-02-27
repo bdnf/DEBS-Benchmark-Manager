@@ -14,10 +14,11 @@ import requests
 import pymysql
 pymysql.install_as_MySQLdb()
 
-SPLIT_PART = 1 # set index of string part of dockerhub image_name.split("/")
-# 1) for testing withing multiple container in one docker repo
+SPLIT_PART = 0 # !!! of string part of dockerhub image_name.split("/")[SPLIT_PART]
+# 1) for testing withing multiple containers in one docker repo
 # 0) for running over multiple docker repos
-HOST = "http://127.0.0.1:8080"
+
+# HOST = "http://127.0.0.1:8080"
 SCHEDULE_PATH = os.getenv("API_SCHEDULE_PATH", default= '/schedule')
 RESULT_PATH = os.getenv("API_RESULT_PATH", default='/result')
 
@@ -38,10 +39,10 @@ endpoint = os.getenv("API_SERVER")
 if endpoint is None:
     logging.error("please specify front-end server address!")
     exit(1)
-    #endpoint = HOST # default endpoint
+    # endpoint = HOST # default endpoint for local runs
 
 # if Mac OS and running on the same machine with DEBS-Api
-# specify (API_SERVER: host.docker.internal) for local use
+# specify (API_SERVER: host.docker.internal)
 
 if "docker" in endpoint:
     endpoint = 'http://' + endpoint + ":8080"
@@ -75,7 +76,6 @@ class Manager:
             #raise subprocess.CalledProcessError(return_code, cmd)
             logging.info("Docker-compose done executing")
 
-
     def create_docker_compose_file(self, image, container):
         # using mock_file way more accurate
         mock_file = "docker-compose-mock.yml"
@@ -88,10 +88,7 @@ class Manager:
         volumes = list_doc["services"]["server"]["volumes"]
         log_volume = volumes[1].split(":")
 
-        try:
-            log_volume = log_volume[0]+ "/" + str(image.split("/")[1]) +":"+log_volume[1]
-        except IndexError:
-            log_volume = log_volume[0]+ "/" + str(image.split("/")[0]) +":"+log_volume[1]
+        log_volume = log_volume[0]+ "/" + str(image.split("/")[SPLIT_PART]) +":"+log_volume[1]
         new_volumes = [volumes[0],log_volume]
         list_doc["services"]["server"]["volumes"] = new_volumes
 
@@ -100,7 +97,6 @@ class Manager:
         with open(new_name, "w") as f:
             yaml.dump(list_doc, f, default_flow_style=False)
         logging.info("docker compose file saved with name %s" % new_name)
-
 
     def get_images(self):
         # requests schedule
@@ -111,15 +107,17 @@ class Manager:
             images = data.json()
 
         except json.decoder.JSONDecodeError as e:
-                logging.error(" Check if the front-end server is reachable! Cannot retrieve JSON response. %s" % e)
+                logging.info(" Check if the front-end server is reachable! Cannot retrieve JSON response.")
+                logging.error(" Got error %s " % e)
                 exit(1)
+
         for image, status in images.items():
             if status == 'updated':
                 try:
                     docker_hub_link = image.split('/')
                     updated_images.append(image)
                 except IndexError:
-                    print('Incorrectly specified image encountered. Format is {team_repo/team_image}')
+                    logging.error('Incorrectly specified image encountered. Format is {team_repo/team_image}')
                     continue
         return updated_images
 
@@ -130,7 +128,6 @@ class Manager:
         with open(dir + "/" + logfile.split('/')[SPLIT_PART] + extension, "w+") as f:
             p = subprocess.Popen(cmd, shell=True, universal_newlines=True, stdout=f)
             p.wait()
-            #return p
 
     def process_result(self, docker_img_name, image_tag):
             global loop_time
@@ -156,20 +153,19 @@ class Manager:
         else:
             rootdir = "../logs"
 
-        overall_data = {}
         dir = full_image_name.split('/')[SPLIT_PART]
         list_of_files = os.listdir(rootdir+"/"+dir)
-        #print("files", list_of_files)
+        # print("files", list_of_files)
         list_of_files = [i for i in list_of_files if ".json" in i]
         if not list_of_files:
             logging.warning('No file result.json yet')
             return {}
         fresh_log = list_of_files[0]
-        #print(fresh_log)
-        with open(rootdir + "/"+ dir+ "/"+fresh_log) as f:
+        # print(fresh_log)
+        with open(rootdir + "/"+ dir + "/" + fresh_log) as f:
             data = json.load(f)
             data['team_image_name'] = full_image_name
-            logging.info("Found data in %s is: %s" % (dir,data))
+            logging.info("Found data in %s is: %s" % (dir, data))
         return data
 
     def start(self):
@@ -179,23 +175,27 @@ class Manager:
         client_container_name = "client-app-"
 
         # requesting schedule
-        self.images = self.get_images()
+        images = self.get_images()
 
         try:
             subprocess.check_output(['docker', 'stop', benchmark_container_name])
             subprocess.check_output(['docker', 'rm', benchmark_container_name])
 
         except subprocess.CalledProcessError as e:
-            logging.info("Trying cleanup. Got: %s. Proceeding!" % e)
+            logging.debug("Cleaning up unused containers, if they are left")
+            logging.debug("Got cleanup error: %s. Proceeding!" % e)
             pass
 
-        logging.info("Current scheduled images: %s" % self.images)
-        for docker_img_name in self.images:
+        logging.info("Current scheduled images: %s" % images)
+        time.sleep(5) # not necessary but if manager rerun, sometimes first image
+                      # might be too slow to establish a connection
 
+        for docker_img_name in images:
             try:
                 subprocess.check_output(['docker', 'rm', client_container_name+docker_img_name.split("/")[SPLIT_PART]])
             except Exception as e:
-                logging.info("Trying cleanup. Got: %s. Proceeding!" %e)
+                logging.debug("Cleaning up unused client containers, if they are left")
+                logging.debug("Got client cleanup error: %s. Proceeding!" % e)
                 pass
 
             tag = ""
@@ -220,21 +220,22 @@ class Manager:
                 logging.info(path)
                 sys.stdout.flush()
 
-            logging.info("docker-compose exited")
+            logging.debug("Docker-compose exited")
 
             client_container = client_container_name+docker_img_name.split("/")[SPLIT_PART]
 
             cmd1 = 'docker logs ' + client_container
-            filename =  docker_img_name
-            self.save_container_log(cmd1, filename, '_client.txt')
+            filename = docker_img_name
+            self.save_container_log(cmd1, filename, '_client_container.log')
             cmd2 = 'docker logs ' + benchmark_container_name
-            self.save_container_log(cmd2, filename, '_bench.txt')
-            logging.info("Container logs saved")
+            self.save_container_log(cmd2, filename, '_bench_container.log')
 
+            logging.debug("Container logs saved")
+            logging.info("Image %s completed " % docker_img_name)
             self.process_result(docker_img_name, tag)
 
-        logging.info("Evaluation is completed")
-        self.images = []
+        logging.info("Evaluation completed.")
+        images = []
         return
 
     def post_result(self, payload):
@@ -250,13 +251,13 @@ class Manager:
         except requests.exceptions.ConnectionError as e:
             logging.error("Check if the front-end server address known! or", e)
             exit(1)
-            #return {"message": "Error! Cannot connect to host machine"}
+            # return {"message": "Error! Cannot connect to host machine"}
 
 
 if __name__ == '__main__':
     logging.warning("Please make sure that backend server is reachable")
     loop_time = int(os.getenv("MANAGER_SLEEP_TIME", default=30))
-    logging.info("BenchmarkManager will wait %s sec between executions" % loop_time)
+    logging.info("BenchmarkManager will wait %s seconds between executions" % loop_time)
 
     manager = Manager()
 
