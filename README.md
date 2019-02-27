@@ -12,10 +12,11 @@ You can set up them in [this .env file](server_app/.env)!
   `HOST_LOG_FOLDER`
   and the Timeouts.
 
-<br>
+
 `Additional variables` can be set in [main docker-compose file](./docker-compose-manager.yml)
 
   MANAGER_SLEEP_TIME, API endpoint, and default API routes that are queried.
+
   `Important!` make sure API endpoint is set correctly.
 
 <br>
