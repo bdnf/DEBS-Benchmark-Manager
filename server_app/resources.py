@@ -78,7 +78,8 @@ class Watchdog:
 
 
 watchdog = Watchdog()
-
+timeout = int(os.getenv("BENCHMARK_GET_TIMEOUT", default=10*60))
+watchdog.extend(timeout)
 
 class Benchmark(Resource):
 
@@ -89,8 +90,8 @@ class Benchmark(Resource):
 
     def get(self):
         global current_scene, TOTAL_SCENES, df
-        timeout = int(os.getenv("BENCHMARK_GET_TIMEOUT", default=10))
-        watchdog.extend(timeout)
+        #timeout = int(os.getenv("BENCHMARK_GET_TIMEOUT", default=10))
+        #watchdog.extend(timeout)
 
         #signal.alarm(10)
 
@@ -146,8 +147,8 @@ class Benchmark(Resource):
         #signal.alarm(0)
         #signal.alarm(5)
         global current_scene
-        timeout = int(os.getenv("BENCHMARK_POST_TIMEOUT", default=10))
-        watchdog.reset_and_extend(timeout)
+        #timeout = int(os.getenv("BENCHMARK_POST_TIMEOUT", default=10))
+        #watchdog.reset_and_extend(timeout)
         score = 0
 
         print('Submitted scene %s' % current_scene)
