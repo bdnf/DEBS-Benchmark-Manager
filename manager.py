@@ -38,7 +38,7 @@ logger = logging.getLogger()
 endpoint = os.getenv("API_SERVER")
 if endpoint is None:
     logging.error("please specify front-end server address!")
-    exit(1)
+    # exit(1)
     # endpoint = HOST # default endpoint for local runs
 
 # if Mac OS and running on the same machine with DEBS-Api
@@ -109,7 +109,9 @@ class Manager:
         except json.decoder.JSONDecodeError as e:
                 logging.info(" Check if the front-end server is reachable! Cannot retrieve JSON response.")
                 logging.error(" Got error %s " % e)
-                exit(1)
+                images = {}
+                pass
+                # exit(1)
 
         for image, status in images.items():
             if status == 'updated':
@@ -250,7 +252,8 @@ class Manager:
                 return {'message': 'Something went wrong. No scene exist. Check if the path is correct'}
         except requests.exceptions.ConnectionError as e:
             logging.error("Check if the front-end server address known! or", e)
-            exit(1)
+            pass
+            # exit(1)
             # return {"message": "Error! Cannot connect to host machine"}
 
 
