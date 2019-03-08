@@ -21,19 +21,26 @@ SPLIT_PART = 0 # !!! of string part of dockerhub image_name.split("/")[SPLIT_PAR
 # HOST = "http://127.0.0.1:8080"
 SCHEDULE_PATH = os.getenv("API_SCHEDULE_PATH", default= '/schedule')
 RESULT_PATH = os.getenv("API_RESULT_PATH", default='/result')
+STATUS_PATH = "/status_update"
+MAX_RETRY_ATTEMPTS = 3
 
 LOG_FOLDER_NAME = "manager_logs"
 if not os.path.exists(LOG_FOLDER_NAME):
     os.makedirs(LOG_FOLDER_NAME)
 filename = 'compose_manager.log'
+logger = logging.getLogger()
 logging.basicConfig(
-                    level=logging.INFO,
+                    level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(threadName)s -  %(levelname)s - %(message)s',
                     handlers=[
-                     logging.FileHandler("{0}/{1}".format(LOG_FOLDER_NAME, filename)),
-                     logging.StreamHandler()
+                     logging.FileHandler("%s/%s" % (LOG_FOLDER_NAME, filename)),
+                     #logging.StreamHandler().setLevel(logging.INFO)
                     ])
-logger = logging.getLogger()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s -  %(levelname)s - %(message)s')
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.INFO)
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
 
 endpoint = os.getenv("API_SERVER")
 if endpoint is None:
@@ -47,7 +54,7 @@ if endpoint is None:
 if "docker" in endpoint:
     endpoint = 'http://' + endpoint + ":8080"
 
-logging.info("API endpoint %s" % endpoint)
+logging.debug("API endpoint %s" % endpoint)
 
 
 class Manager:
@@ -56,6 +63,8 @@ class Manager:
         # used to encode datetime objects
         json.JSONEncoder.default = lambda self,obj: (obj.isoformat() if isinstance(obj, datetime.datetime) else None)
         self.images = []
+        self.retry_attempts = {} #for each image
+        self.client_progress_status = 0 #how many scenes processed until now
 
     # not used but might be helpful
     def find_container_ip_addr(self, container_name):
@@ -72,9 +81,11 @@ class Manager:
             yield stdout_line
         popen.stdout.close()
         return_code = popen.wait()
+        self.benchmark_return_code = return_code
         if return_code:
             #raise subprocess.CalledProcessError(return_code, cmd)
-            logging.info("Docker-compose done executing")
+            logging.info("Docker-compose done executing with code %s" % return_code )
+
 
     def create_docker_compose_file(self, image, container):
         # using mock_file way more accurate
@@ -102,9 +113,12 @@ class Manager:
         # requests schedule
         global endpoint
         updated_images = []
-        data = requests.get(endpoint + SCHEDULE_PATH)
+        response = requests.get(endpoint + SCHEDULE_PATH)
+        logging.info("Scheduler answer status %s " % response.status_code)
+        if (response.status_code == 403):
+            logging.error("Manger can't access remote server. FORBIDDEN %s " % response.status_code)
         try:
-            images = data.json()
+            images = response.json()
 
         except json.decoder.JSONDecodeError as e:
                 logging.info(" Check if the front-end server is reachable! Cannot retrieve JSON response.")
@@ -118,6 +132,7 @@ class Manager:
                 try:
                     docker_hub_link = image.split('/')
                     updated_images.append(image)
+                    self.post_status({image:"Queued"})
                 except IndexError:
                     logging.error('Incorrectly specified image encountered. Format is {team_repo/team_image}')
                     continue
@@ -141,10 +156,11 @@ class Manager:
                 team_result['last_run'] = datetime.datetime.utcnow().replace(microsecond=0).replace(second=0)
                 team_result['piggybacked_manager_timeout'] = loop_time
                 logging.info("Sending results: %s" % team_result)
-                self.post_result(team_result)
-                logging.info("Completed run for %s" % docker_img_name)
+                self.client_progress_status = team_result.get("computed_scenes",0)
+                return team_result
             else:
                 logging.error("No results after becnhmark run of %s" % docker_img_name)
+                return {'team_image_name': docker_img_name,'computed_scenes':0}
             sys.stdout.flush()
 
     def extract_result_files(self, full_image_name):
@@ -164,10 +180,14 @@ class Manager:
             return {}
         fresh_log = list_of_files[0]
         # print(fresh_log)
+        res_json_folder = rootdir + "/"+ dir + "/"
+        new_log = fresh_log.split('.')[0] + "checkedAt" + datetime.datetime.utcnow().strftime("%s") + "."+ fresh_log.split('.')[1]
         with open(rootdir + "/"+ dir + "/" + fresh_log) as f:
             data = json.load(f)
             data['team_image_name'] = full_image_name
             logging.info("Found data in %s is: %s" % (dir, data))
+        subprocess.check_output(['mv', res_json_folder+fresh_log, res_json_folder+new_log])
+        logging.info("Removed result file :%s after check" % res_json_folder+new_log)
         return data
 
     def start(self):
@@ -180,8 +200,8 @@ class Manager:
         images = self.get_images()
 
         try:
-            subprocess.check_output(['docker', 'stop', benchmark_container_name])
-            subprocess.check_output(['docker', 'rm', benchmark_container_name])
+            subprocess.Popen(['docker', 'stop', benchmark_container_name], stderr=subprocess.PIPE)
+            subprocess.Popen(['docker', 'rm', benchmark_container_name], stderr=subprocess.PIPE)
 
         except subprocess.CalledProcessError as e:
             logging.debug("Cleaning up unused containers, if they are left")
@@ -203,6 +223,8 @@ class Manager:
             tag = ""
             try:
                 logging.info("Pulling image ........... %s" % docker_img_name)
+                self.post_status({docker_img_name: "Pulling image"})
+
                 subprocess.check_output(['docker', 'pull', docker_img_name])
                 tag = subprocess.check_output(['docker', 'inspect', docker_img_name])
                 tag = json.loads(tag.decode('utf-8'))[0]["Id"]
@@ -215,6 +237,8 @@ class Manager:
             container_name = client_container_name+docker_img_name.split("/")[SPLIT_PART]
             self.create_docker_compose_file(docker_img_name, container_name) #TODO change for [0] for client repo name
 
+            self.post_status({docker_img_name: "Running experiment"})
+
             cmd = ['docker-compose', 'up', '--build', '--abort-on-container-exit']
             # real-time output
             for path in self.execute(cmd):
@@ -222,7 +246,9 @@ class Manager:
                 logging.info(path)
                 sys.stdout.flush()
 
+
             logging.debug("Docker-compose exited")
+            self.post_status({docker_img_name: "Preparing results"})
 
             client_container = client_container_name+docker_img_name.split("/")[SPLIT_PART]
 
@@ -234,7 +260,25 @@ class Manager:
 
             logging.debug("Container logs saved")
             logging.info("Image %s completed " % docker_img_name)
-            self.process_result(docker_img_name, tag)
+            team_result = self.process_result(docker_img_name, tag)
+
+            if self.benchmark_return_code and self.client_progress_status == 0:
+                logging.error("Docker-compose exited with code %s" % self.benchmark_return_code)
+                logging.warning("Will retry on the next run")
+                if self.retry_attempts.get(docker_img_name,0) <= MAX_RETRY_ATTEMPTS:
+                     self.retry_attempts[docker_img_name] = self.retry_attempts.get(docker_img_name,0) + 1
+                     self.post_status({docker_img_name: "Retrying"})
+                     continue
+                else:
+                    self.retry_attempts[docker_img_name] = self.retry_attempt.get(docker_img_name,0)
+                    pass
+
+            logging.info("retry dict is: %s " % self.retry_attempts)
+
+            self.post_status({docker_img_name: "Ready"})
+            self.post_result(team_result)
+
+            logging.info("Completed run for %s" % docker_img_name)
 
         logging.info("Evaluation completed.")
         images = []
@@ -250,6 +294,18 @@ class Manager:
                 return {'status': 'success', 'message': 'updated'}
             if (response.status_code == 404):
                 return {'message': 'Something went wrong. No scene exist. Check if the path is correct'}
+        except requests.exceptions.ConnectionError as e:
+            logging.error("Check if the front-end server address known! or", e)
+            pass
+
+    def post_status(self, payload):
+        headers = {'Content-type': 'application/json'}
+        try:
+            response = requests.post(endpoint + STATUS_PATH, json = payload, headers=headers)
+            if (response.status_code == 201):
+                return {'status': 'success', 'message': 'updated'}
+            else:
+                return {'status': response.status_code}
         except requests.exceptions.ConnectionError as e:
             logging.error("Check if the front-end server address known! or", e)
             pass

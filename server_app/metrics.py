@@ -1,5 +1,6 @@
 from functools import reduce
-
+import sqlite3
+import json
 
 def accuracy(a, b):
     common_keys = set(a).intersection(b)
@@ -60,6 +61,52 @@ def recall(a,b):
             return (score+val_score)/2
         else:
             return score
+
+
+def results(scenes_count, TOTAL_SCENES, total_time_score):
+    print("Calling Bench Results")
+    conn = sqlite3.connect('debs.db')
+    cursor = conn.cursor()
+
+    query = "SELECT SUM(accuracy), SUM(precision), SUM(recall), SUM(prediction_speed) FROM predictions"
+    cursor.execute(query)
+    result = cursor.fetchone()
+    conn.close()
+
+    if result[0]:
+        accuracy = float(result[0])/TOTAL_SCENES
+        precision = float(result[1])/TOTAL_SCENES
+        recall = float(result[2])/TOTAL_SCENES
+    else:
+        print("Client failed on first scene without results")
+        accuracy = 0
+        precision = 0
+        recall = 0
+
+    #TODO flag extended logging TEAMNAME:HOSTURL(post)
+    # logging.info('FINAL_RESULT accuracy:%s' % accuracy)
+    # logging.info('FINAL_RESULT precision:%s' % precision)
+    # logging.info('FINAL_RESULT recall:%s' % recall)
+    # logging.info('FINAL_RESULT runtime:%s' % result[3])
+    # logging.info('FINAL_RESULT: check_runtime:%s' % Benchmark.total_time_score)
+    # logging.info('FINAL_RESULT: check_runtime:%s' % scenes_count)
+
+    data = {
+            "accuracy": str(accuracy),
+            "precision": str(precision),
+            "recall": str(recall),
+            "runtime": result[3],
+            "check_runtime": total_time_score,
+            "computed_scenes": scenes_count
+    }
+    with open("/logs/result.json", "w") as write_file:
+        json.dump(data, write_file)
+
+    return {'average accuracy': result[0],
+            'average precision': result[1],
+            'average recall': result[2],
+            'total runtime from db': result[3],
+            'total runtime': total_time_score}
 
 # c = {'Pedestrian': '2',
 #  'BigSassafras': '1',

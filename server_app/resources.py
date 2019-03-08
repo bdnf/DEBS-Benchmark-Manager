@@ -11,15 +11,13 @@ import subprocess
 import logging
 import json
 import signal
-import threading
 import metrics
-#from watchdog import Watchdog
 import atexit
 import time
+
 in_file = "../dataset/in.csv"
 out_file = "../dataset/out.csv"
 current_scene = 0
-
 
 if not os.path.isfile(in_file):
     print("in.csv file not found. Please put datafiles in /dataset folder")
@@ -61,12 +59,17 @@ class Watchdog:
     def __init__(self):
         signal.signal(signal.SIGALRM, self.handler)
 
+        #atexit.register(self.handle_exit)
+
+    #def handle_exit(self):
+         #logging.info("Benchmark exited")
+         #metrics.results(current_scene, TOTAL_SCENES, Benchmark.total_time_score)
     #signum, frame
     def handler(self, signum, frame):
-          print("Forever is over!")
+          logging.info("Timeout is over!")
           BenchmarkResults.results(current_scene)
           #self.func(self.num)
-          exit(1)
+          exit(137)
           #raise Exception("end of time")
 
     def extend(self, time):
@@ -78,15 +81,15 @@ class Watchdog:
 
 
 watchdog = Watchdog()
-timeout = int(os.getenv("BENCHMARK_GET_TIMEOUT", default=10*60))
-watchdog.extend(timeout)
+timeout = int(os.getenv("BENCHMARK_GET_TIMEOUT", default=600))
+watchdog.reset_and_extend(timeout)
 
 class Benchmark(Resource):
 
     total_time_score = 0
     # def __init__(self, common):
     #     self.common = common
-
+    logging.info("Timeout set to %s seconds" % timeout)
 
     def get(self):
         global current_scene, TOTAL_SCENES, df
@@ -101,7 +104,7 @@ class Benchmark(Resource):
                 BenchmarkResults.results(current_scene)
                 logging.warning('Last scene reached. Total time is 0. No more scenes left. Please, check you detailed results now')
                 filename = int(datetime.datetime.utcnow().strftime("%s"))
-                os.system('cp debs.db /logs/benchmark%s.db' % filename)
+                os.system('mv debs.db /logs/benchmark%s.db' % filename)
                 return {'message': 'Last scene reached. No more scenes left. Please, check you detailed results now',
                         'total runtime': 'An error occured when computing total runtime. Please rebuild the Benchmark server'}, 404
             else:
@@ -109,7 +112,7 @@ class Benchmark(Resource):
                 filename = int(datetime.datetime.utcnow().strftime("%s"))
                 BenchmarkResults.results(current_scene)
                 logging.info("saving database...")
-                os.system('cp debs.db /logs/destination%s.db' % filename)
+                os.system('mv debs.db /logs/destination%s.db' % filename)
                 return {'message': 'Last scene reached. No more scenes left. Please, check you detailed results now',
                         'total runtime': Benchmark.total_time_score}, 404
         current_scene +=1
