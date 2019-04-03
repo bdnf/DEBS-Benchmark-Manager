@@ -24,37 +24,25 @@ RESULT_PATH = os.getenv("API_RESULT_PATH", default='/result')
 STATUS_PATH = "/status_update"
 MAX_RETRY_ATTEMPTS = 3
 
-LOG_FOLDER_NAME = "manager_logs"
-if not os.path.exists(LOG_FOLDER_NAME):
-    os.makedirs(LOG_FOLDER_NAME)
-filename = 'compose_manager.log'
-logger = logging.getLogger()
-logging.basicConfig(
-                    level=logging.DEBUG,
-                    format='%(asctime)s - %(name)s - %(threadName)s -  %(levelname)s - %(message)s',
-                    handlers=[
-                     logging.FileHandler("%s/%s" % (LOG_FOLDER_NAME, filename)),
-                     #logging.StreamHandler().setLevel(logging.INFO)
-                    ])
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s -  %(levelname)s - %(message)s')
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.INFO)
-stream_handler.setFormatter(formatter)
-logger.addHandler(stream_handler)
 
-endpoint = os.getenv("API_SERVER")
-if endpoint is None:
-    logging.error("please specify front-end server address!")
-    # exit(1)
-    # endpoint = HOST # default endpoint for local runs
-
-# if Mac OS and running on the same machine with DEBS-Api
-# specify (API_SERVER: host.docker.internal)
-
-if "docker" in endpoint:
-    endpoint = 'http://' + endpoint + ":8080"
-
-logging.debug("API endpoint %s" % endpoint)
+def create_new_log(filename):
+    LOG_FOLDER_NAME = "manager_logs"
+    if not os.path.exists(LOG_FOLDER_NAME):
+        os.makedirs(LOG_FOLDER_NAME)
+    filename = 'compose_manager_%s.log' % filename
+    logger = logging.getLogger()
+    logging.basicConfig(
+                        level=logging.DEBUG,
+                        format='%(asctime)s - %(name)s - %(threadName)s -  %(levelname)s - %(message)s',
+                        handlers=[
+                         logging.FileHandler("%s/%s" % (LOG_FOLDER_NAME, filename)),
+                         #logging.StreamHandler().setLevel(logging.INFO)
+                        ])
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s -  %(levelname)s - %(message)s')
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
 
 
 class Manager:
@@ -314,12 +302,37 @@ class Manager:
 
 
 if __name__ == '__main__':
+    today = datetime.datetime.utcnow().date()
+    filename_date = "".join(today.strftime("%B %d, %Y").split(',')[0].split(' '))
+    create_new_log(filename_date)
+
     logging.warning("Please make sure that backend server is reachable")
     loop_time = int(os.getenv("MANAGER_SLEEP_TIME", default=30))
     logging.info("BenchmarkManager will wait %s seconds between executions" % loop_time)
 
-    manager = Manager()
+    endpoint = os.getenv("API_SERVER")
+    if endpoint is None:
+        logging.error("please specify front-end server address!")
+        # exit(1)
+        # endpoint = HOST # default endpoint for local runs
 
+    # if Mac OS and running on the same machine with DEBS-Api
+    # specify (API_SERVER: host.docker.internal)
+
+    if "docker" in endpoint:
+        endpoint = 'http://' + endpoint + ":8080"
+
+    logging.debug("API endpoint %s" % endpoint)
+
+    # Starting Manager
+    manager = Manager()
     while(True):
+        new_day = datetime.datetime.utcnow().date()
+        if (today != new_day):
+            logging.debug("New date. Starting new log file")
+            filename_date = "".join(new_day.strftime("%B %d, %Y").split(',')[0].split(' '))
+            create_new_log(filename_date)
+            today = new_day
+
         manager.start()
         time.sleep(loop_time)
