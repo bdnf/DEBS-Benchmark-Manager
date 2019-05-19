@@ -20,7 +20,7 @@ out_file = "../dataset/out.csv"
 current_scene = 0
 runtime_start = 0
 latency = 0
-overall_latency = 0
+overall_latency = None
 
 if not os.path.isfile(in_file):
     print("in.csv file not found. Please put datafiles in /dataset folder")
@@ -161,9 +161,12 @@ class Benchmark(Resource):
         #signal.alarm(0)
         #signal.alarm(5)
         global current_scene, latency, overall_latency
-        scenes_latency = datetime.datetime.utcnow() - latency
-        overall_latency += scenes_latency
-        print("Latency for scene %s was %s" % (current_scene, scenes_latency))
+        scene_latency = datetime.datetime.utcnow() - latency
+        if overall_latency:
+            overall_latency += scene_latency
+        else: #None
+            overall_latency = scene_latency
+        print("Latency for scene %s was %s" % (current_scene, scene_latency))
         #timeout = int(os.getenv("BENCHMARK_POST_TIMEOUT", default=10))
         #watchdog.reset_and_extend(timeout)
         score = 0
