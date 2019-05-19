@@ -18,6 +18,8 @@ import time
 in_file = "../dataset/in.csv"
 out_file = "../dataset/out.csv"
 current_scene = 0
+runtime_start = 0
+latency = 0
 
 if not os.path.isfile(in_file):
     print("in.csv file not found. Please put datafiles in /dataset folder")
@@ -92,7 +94,7 @@ class Benchmark(Resource):
     logging.info("Timeout set to %s seconds" % timeout)
 
     def get(self):
-        global current_scene, TOTAL_SCENES, df
+        global current_scene, TOTAL_SCENES, df, runtime_start, latency
         #timeout = int(os.getenv("BENCHMARK_GET_TIMEOUT", default=10))
         #watchdog.extend(timeout)
 
@@ -109,12 +111,21 @@ class Benchmark(Resource):
                         'total runtime': 'An error occured when computing total runtime. Please rebuild the Benchmark server'}, 404
             else:
                 logging.warning('Last scene reached. No more scenes left. Please, check you detailed results now')
+                runtime_end = datetime.datetime.utcnow()
+                total_runtime = runtime_start - runtime_end
+                logging.info("FINAL RUNTIME: %s" % total_runtime)
+                logging.info("TOTAL LATENCY: %s" % latency)
+                print("FINAL RUNTIME: %s" % total_runtime)
+                print("TOTAL LATENCY: %s" % latency)
+                print("AVERAGE LATENCY: %s" % (latency/current_scene))
                 filename = int(datetime.datetime.utcnow().strftime("%s"))
                 BenchmarkResults.results(current_scene)
                 logging.info("saving database...")
                 os.system('mv debs.db /logs/destination%s.db' % filename)
                 return {'message': 'Last scene reached. No more scenes left. Please, check you detailed results now',
                         'total runtime': Benchmark.total_time_score}, 404
+
+        runtime_start = datetime.datetime.utcnow()
         current_scene +=1
         print("Requested scene %s" % current_scene)
         sys.stdout.flush()
@@ -130,6 +141,7 @@ class Benchmark(Resource):
             raise ValueError("scene probably has incorrect number of rows", len(sc.index))
 
         result = sc.to_json(orient='records')
+        latency = datetime.datetime.utcnow()
 
         return {'scene': result}
 
@@ -149,7 +161,9 @@ class Benchmark(Resource):
 
         #signal.alarm(0)
         #signal.alarm(5)
-        global current_scene
+        global current_scene, latency
+        latency = datetime.datetime.utcnow() - latency
+        print("Latency for scene %s was %s", (current_scene, latency))
         #timeout = int(os.getenv("BENCHMARK_POST_TIMEOUT", default=10))
         #watchdog.reset_and_extend(timeout)
         score = 0
