@@ -20,6 +20,7 @@ out_file = "../dataset/out.csv"
 current_scene = 0
 runtime_start = 0
 latency = 0
+overall_latency = 0
 
 if not os.path.isfile(in_file):
     print("in.csv file not found. Please put datafiles in /dataset folder")
@@ -112,12 +113,10 @@ class Benchmark(Resource):
             else:
                 logging.warning('Last scene reached. No more scenes left. Please, check you detailed results now')
                 runtime_end = datetime.datetime.utcnow()
-                total_runtime = runtime_start - runtime_end
+                total_runtime = runtime_end - runtime_start
                 logging.info("FINAL RUNTIME: %s" % total_runtime)
                 logging.info("TOTAL LATENCY: %s" % latency)
-                print("FINAL RUNTIME: %s" % total_runtime)
-                print("TOTAL LATENCY: %s" % latency)
-                print("AVERAGE LATENCY: %s" % (latency/current_scene))
+                logging.info("AVERAGE LATENCY: %s" % (latency/current_scene))
                 filename = int(datetime.datetime.utcnow().strftime("%s"))
                 BenchmarkResults.results(current_scene)
                 logging.info("saving database...")
@@ -161,9 +160,10 @@ class Benchmark(Resource):
 
         #signal.alarm(0)
         #signal.alarm(5)
-        global current_scene, latency
-        latency = datetime.datetime.utcnow() - latency
-        print("Latency for scene %s was %s", (current_scene, latency))
+        global current_scene, latency, overall_latency
+        scenes_latency = datetime.datetime.utcnow() - latency
+        overall_latency += scenes_latency
+        print("Latency for scene %s was %s" % (current_scene, scenes_latency))
         #timeout = int(os.getenv("BENCHMARK_POST_TIMEOUT", default=10))
         #watchdog.reset_and_extend(timeout)
         score = 0
