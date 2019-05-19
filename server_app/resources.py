@@ -95,7 +95,7 @@ class Benchmark(Resource):
     logging.info("Timeout set to %s seconds" % timeout)
 
     def get(self):
-        global current_scene, TOTAL_SCENES, df, runtime_start, latency
+        global current_scene, TOTAL_SCENES, df, runtime_start, latency, overall_latency
         #timeout = int(os.getenv("BENCHMARK_GET_TIMEOUT", default=10))
         #watchdog.extend(timeout)
 
@@ -115,11 +115,18 @@ class Benchmark(Resource):
                 runtime_end = datetime.datetime.utcnow()
                 total_runtime = runtime_end - runtime_start
                 logging.info("FINAL RUNTIME: %s" % total_runtime)
-                logging.info("TOTAL LATENCY: %s" % latency)
-                logging.info("AVERAGE LATENCY: %s" % (latency/current_scene))
+                logging.info("TOTAL LATENCY: %s" % overall_latency)
+                print("FINAL RUNTIME: %s" % total_runtime)
+                print("TOTAL LATENCY: %s" % overall_latency)
+                try:
+                    logging.info("AVERAGE LATENCY: %s" % (overall_latency/current_scene))
+                    print("AVERAGE LATENCY: %s" % (overall_latency/current_scene))
+                except TypeError:
+                    pass
                 filename = int(datetime.datetime.utcnow().strftime("%s"))
                 BenchmarkResults.results(current_scene)
                 logging.info("saving database...")
+                sys.stdout.flush()
                 os.system('mv debs.db /logs/destination%s.db' % filename)
                 return {'message': 'Last scene reached. No more scenes left. Please, check you detailed results now',
                         'total runtime': Benchmark.total_time_score}, 404
