@@ -18,7 +18,7 @@ import time
 in_file = "../dataset/in.csv"
 out_file = "../dataset/out.csv"
 current_scene = 0
-runtime_start = 0
+runtime_start = None
 latency = 0
 overall_latency = None
 
@@ -96,6 +96,8 @@ class Benchmark(Resource):
 
     def get(self):
         global current_scene, TOTAL_SCENES, df, runtime_start, latency, overall_latency
+        if not runtime_start:
+            runtime_start = datetime.datetime.utcnow()
         #timeout = int(os.getenv("BENCHMARK_GET_TIMEOUT", default=10))
         #watchdog.extend(timeout)
 
@@ -131,7 +133,6 @@ class Benchmark(Resource):
                 return {'message': 'Last scene reached. No more scenes left. Please, check you detailed results now',
                         'total runtime': Benchmark.total_time_score}, 404
 
-        runtime_start = datetime.datetime.utcnow()
         current_scene +=1
         print("Requested scene %s" % current_scene)
         sys.stdout.flush()
@@ -328,7 +329,7 @@ class BenchmarkResults(Resource):
         logging.info('FINAL_RESULT recall:%s' % recall)
         logging.info('FINAL_RESULT runtime:%s' % result[3])
         logging.info('FINAL_RESULT: check_runtime:%s' % Benchmark.total_time_score)
-        logging.info('FINAL_RESULT: check_runtime:%s' % scenes_count)
+        logging.info('FINAL_RESULT: scenes:%s' % scenes_count)
 
         data = {
                 "accuracy": str(accuracy),
